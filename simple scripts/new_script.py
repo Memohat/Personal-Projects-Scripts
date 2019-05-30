@@ -11,26 +11,22 @@ if len(sys.argv) > 1:
 else:
     name = input("Please enter the new file name: ")
 
-# put the folder name of where the scripts are going to be put
-python_scripts_path = '..'
-
-os.chdir(python_scripts_path)
-
-#folder name of batch files
-batch_path = os.path.join(".", "Batch files")
-
 try:
     python_file = open(f"{name}.py", "x")
-    python_file.write("#! python3")
+    python_file.write('#! python3\n# Mehmet Hatip\n\n')
     python_file.close()
     print(f"File {name}.py successfully created")
+    os.startfile(f'{name}.py')
 except:
     print(f"Error, {name}.py file already exists")
-
+f"""{name}"""
 try:
-    os.chdir(batch_path)
-    with open(f"{name}.bat", "x") as bat:
-        bat.write(f'@py.exe "{python_scripts_path}\{name}.py" %*')
-    print(f"File {name}.bat successfully created.")
+    os.chdir('ps1files')
+    with open(f"{name}.ps1", "x") as bat:
+        bat.write(
+f"""cd ..
+py "{name}.py"
+cd ps1files""")
+    print(f"File {name}.ps1 successfully created.")
 except:
-    print(f"Error, {name}.bat file already exists")
+    print(f"Error, {name}.ps1 file already exists")

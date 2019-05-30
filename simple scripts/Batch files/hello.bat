@@ -1,1 +1,0 @@
-@py.exe "..\hello.py" %*
