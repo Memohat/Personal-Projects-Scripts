@@ -10,14 +10,14 @@ if len(sys.argv) > 1:
 else:
     name = input("Please enter the file to be deleted: ")
 
-if os.path.exists(name + ".py"):
+if os.path.isfile(name + ".py"):
     os.remove(os.path.join(name + ".py"))
     print(f"File {name}.py successfully deleted")
 else:
     print(f"Error, {name}.py does not exist")
 
 os.chdir('ps1files')
-if os.path.exists(name + ".ps1"):
+if os.path.isfile(name + ".ps1"):
     os.remove(name + ".ps1")
     print(f"File {name}.ps1 successfully deleted")
 else:
