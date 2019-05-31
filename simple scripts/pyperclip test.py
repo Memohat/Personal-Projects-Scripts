@@ -1,8 +1,15 @@
+#! python3
+# Mehmet Hatip
+
 import pyperclip
 
-pasted = pyperclip.paste()
-print(f"Clipboard: {pasted}")
+def main():
+    pasted = pyperclip.paste()
+    print(f"Clipboard: {pasted}")
 
-word = "hello!"
-copied = pyperclip.copy(word)
-print(f"Clipboard now contains {word}")
+    word = "hello!"
+    copied = pyperclip.copy(word)
+    print(f"Clipboard now contains {word}")
+
+if __name__ == '__main__':
+    main()
