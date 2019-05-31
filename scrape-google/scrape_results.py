@@ -42,23 +42,23 @@ with open(source, encoding="utf-8") as fin:
 try:
     with open(output, 'a+', newline='') as fout:
         # opening output file
-
+        
         writer = csv.writer(fout)
         # using csv module
-
+        
         i = 1
         # counter for number of queries done
-
+        
         headers = ['Query', 'Website']
 
         with open(f"{name}.csv", newline='') as fout2:
             topline = fout2.readline()
             if topline.strip() != ','.join(headers):
                 writer.writerow(headers)
-
+        
         for query, google_url in search_url:
-
-            i += 1
+            
+            i += 1            
 
             while True:
                 try:
@@ -67,10 +67,10 @@ try:
 
                     request.raise_for_status()
                     # make sure file was successfully obtained
-
+                    
                     soup = bs4.BeautifulSoup(request.text, features='html.parser')
                     # make new BeautifulSoup object using request.text
-
+                                 
                     info = soup.select('.r a')[0]
                     """
                     specification to get the first search result on google using bs4.
@@ -88,7 +88,7 @@ try:
             mo = Regex.search(url)
 
             url = mo.group()
-
+            
             writer.writerow([query, url])
             # write the query and its url into the output file.
 
@@ -96,10 +96,12 @@ try:
             #print the counter and query on the console
 
             time.sleep(30)
-            # delaying for 30 seconds so program is not requesting too much at once
+            # delaying for 30 seconds so program is not requesting too much at once            
 
     print(f"File stored in {path}")
     # end message saying file was stored
 
 except PermissionError:
     print(f"Error, {name} is open\nClose the file and try again")
+
+    
