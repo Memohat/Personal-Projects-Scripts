@@ -90,6 +90,7 @@ while True:
                 print(f'Downloading imgur album to "{folder_name}"', end='')
                 i = 1
                 for item in images:
+                    print('.', end='')
                     url = item.link
                     extension = find_extension(url)
                     if item.title:
@@ -98,7 +99,6 @@ while True:
                         title = 'Untitled' + str(i)
                         i += 1
                     download_file(title + extension, url)
-                    print('.', end='')
                 print('\nFinished imgur album')
                 os.chdir('..')
                 continue
