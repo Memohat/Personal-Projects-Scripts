@@ -4,6 +4,8 @@
 import requests, json, praw, os, shutil, logging, re, pprint, sys
 from imgurpython import ImgurClient
 
+message = "Enter name of subreddit, e to exit, r for random: "
+
 def find_extension(url):
     try:
         return re.search(r'\.\w+$', url).group()
@@ -11,20 +13,24 @@ def find_extension(url):
         return 'NONE'
 
 def download_file(name, url, text=None):
-    if not os.path.isfile(name):
-        if text:
-            saveFile = open(name, 'w')
-            saveFile.write(text)
+    try:
+        if not os.path.isfile(name):
+            if text:
+                saveFile = open(name, 'w')
+                saveFile.write(text)
+            else:
+                res = requests.get(url, stream=True)
+                #res.raise_for_status()
+                saveFile = open(name, 'wb')
+                for chunk in res:
+                    saveFile.write(chunk)
+            saveFile.close()
+            return str(f'Downloaded {name}')
         else:
-            res = requests.get(url, stream=True)
-            #res.raise_for_status()
-            saveFile = open(name, 'wb')
-            for chunk in res:
-                saveFile.write(chunk)
-        saveFile.close()
-        return True
-    else:
-        return None
+            return str(f'File {name} already exists')
+    except Exception as e:
+        print(e)
+        return str(f'File {name} could not be downloaded')
 
 def get_subreddit():
     sub = sys.argv[1] if len(sys.argv) > 1 else input(message)
@@ -40,17 +46,9 @@ def make_dir(sub):
 
 def main():
     logging.basicConfig(level=logging.DEBUG, format='%(message)s')
-    """
+
     logging.disable(logging.DEBUG)
-
-    logging.disable(logging.INFO)
-
-    logging.disable(logging.ERROR)
-
     logging.disable(logging.CRITICAL)
-    """
-
-    message = "Enter name of subreddit, e to exit, r for random: "
 
 
     reddit = praw.Reddit(
@@ -118,7 +116,7 @@ def main():
                             title = 'Untitled' + str(i)
                             i += 1
 
-                        download_file(title + extension, url)
+                        status = download_file(title + extension, url)
 
                     print('\nFinished imgur album')
                     os.chdir('..')
@@ -140,10 +138,8 @@ def main():
 
             logging.info('Download URL: ' + url)
             name = title + extension
-            if download_file(name, url, text=text):
-                print(f'Downloaded {name}')
-            else:
-                print(f'File {name} already exists')
+            status = download_file(name, url, text=text)
+            print(status)
 
         os.chdir("..")
         print("Done")
