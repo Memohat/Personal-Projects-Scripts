@@ -5,9 +5,12 @@ import requests, json, praw, os, shutil, logging
 import re, pprint, sys, time, random, subprocess
 from imgurpython import ImgurClient
 
-message = "Enter name of subreddit, e to exit, r for random: "
-automate = [None,'r'][0] # Automates to select r each time
-data_file_name = 'Reddit'
+
+logging.basicConfig(level=logging.DEBUG, format='%(message)s')
+logging.disable(logging.ERROR)
+data_file_name = 'Reddit scrape'
+fn = '----'
+msg_exit_format = 'Exiting to main menu: {0}'
 
 def find_extension(url):
     try:
@@ -43,9 +46,9 @@ def download_video(name, video, audio):
             logging.info(f'Video name: {name}')
             cmd = "ffmpeg -i %s -i %s -c:v copy -c:a aac -strict experimental %s"
             cmd = cmd % ('video.mp4', 'audio.mp3', 'combined.mp4')
-            logging.info(f'CMD: {cmd}')
-            with open(os.devnull, 'w') as devnull:
-                subprocess.run(cmd, stdout=devnull)
+            #with open(os.devnull, 'w') as devnull:
+            #    subprocess.run(cmd, stdout=devnull)
+            subprocess.run(cmd)
             os.remove('video.mp4')
             os.remove('audio.mp3')
             os.rename('combined.mp4', name)
@@ -54,14 +57,6 @@ def download_video(name, video, audio):
             return str(f'{name} already exists')
     except:
         return str(f'{name} could not be downloaded')
-
-def get_subreddit(delay=5):
-    if automate:
-        sub = automate
-        time.sleep(delay)
-    else:
-        sub = input(message)
-    return sub
 
 def make_dir(dir_name):
     if not os.path.isdir(dir_name):
@@ -73,7 +68,7 @@ def slim_title(title):
     title = title[:char_max-1] if len(title) >= char_max else title
     return title
 
-def get_size(start_path=os.getcwd(), storage=50):
+def get_size(storage, start_path=os.getcwd()):
     total_size = 0
     for dirpath, dirnames, filenames in os.walk(start_path):
         for f in filenames:
@@ -84,10 +79,21 @@ def get_size(start_path=os.getcwd(), storage=50):
                     total_size += os.path.getsize(fp)
                 except:
                     None
-    exceeded = bool(total_size >= storage**10)
+    exceeded = bool(total_size >= storage * 10**9)
     if exceeded:
-        print(f'Exceeded {storage} gigabytes, exiting')
+        print(msg_exit_format.format(f'Reached {storage} gigabyte(s)'))
     return exceeded
+
+def get_num_sub(num):
+    if num == 'e':
+        print(msg_exit_format.format(''))
+        return True
+    elif type(num) == int:
+        num -= 1
+        if num == 0:
+            print(msg_exit_format.format('Subreddit count reached'))
+            return True
+    return False
 
 def clients():
     reddit = praw.Reddit(
@@ -111,39 +117,104 @@ def subreddit_param(sub, section='top', posts=10):
     elif section == 'new':
         return sub.new(limit=posts)
 
+def automation(storage):
+    msg_storage = f'Limit set at {storage} gigabyte(s). Change? (y/n) '
+    usr_storage = None
+    while True:
+        usr_storage = input(msg_storage)
+        if usr_storage == 'y':
+            while True:
+                storage = input('Enter new gigabyte amount: ')
+                try:
+                    storage = float(storage)
+                    break
+                except:
+                    print('Error: not number value')
+            break
+        elif usr_storage == 'n':
+            break
+
+    num_sub = input('Enter number of random subreddits to download, or press '
+                    + f'Enter to fill all {storage} gigabyte(s) (e to exit) ')
+    try:
+        num_sub = float(num_sub)
+    except:
+        if num_sub != 'e':
+            num_sub = None
+
+    return num_sub, storage
+
+
 def main():
-    logging.basicConfig(level=logging.DEBUG, format='%(message)s')
-    logging.disable(logging.CRITICAL)
+    prompt = ("Enter name of subreddits, separate with space\n\t"
+    + "r for random\n\t"
+    + "rr for random automation\n\t"
+    + "d-subreddit to delete subreddit folder\n\t"
+    + "e to exit\n")
+
     reddit, imgur = clients()
-
     make_dir(data_file_name)
-
-    sub = sys.argv[1] if len(sys.argv) > 1 else get_subreddit()
+    automate, num = False, -1
+    inp = None
+    storage = 1
+    logging.debug('Start of while loop')
 
     while True:
-        if sub == 'e':
-            print('Exiting')
-            break
-        elif sub == 'r':
-            sub = reddit.random_subreddit()
+        if automate:
+            if num == -1:
+                num, storage = automation(storage)
+            if get_size(storage) or get_num_sub(num):
+                automate = False
+                num = -1
+                continue
+            inp = inp[0]
         else:
-            sub = reddit.subreddit(sub)
+            if len(sys.argv) <= 1:
+                sys.argv = sys.argv + input(prompt).split()
+            inp = sys.argv.pop(1)
 
-        if get_size():
-            break
-
-        if sub.over18:
-            sub.title = '*' * 4
-            make_dir('z----')
-
-        try:
-            print(f'Subreddit: {sub.title}')
-            make_dir(sub.display_name)
-        except:
-            print('Error, subreddit does not exist')
-            sub = get_subreddit()
+        if inp == 'e':
+            print('Exiting')
+            sys.exit()
+        elif inp == 'r':
+            sub = reddit.random_subreddit()
+        elif inp == 'n':
+            sub = reddit.random_subreddit(True)
+        elif inp == 'nn' or inp == 'rr':
+            automate = True
             continue
-        print('Copying files...', end='')
+        elif inp.startswith('d-'):
+            del_sub = inp[2:]
+            if os.path.isdir(del_sub):
+                shutil.rmtree(del_sub)
+                print(f'{del_sub} successfully deleted')
+            elif os.path.isdir(os.path.join(fn, del_sub)):
+                shutil.rmtree(os.path.join(fn, del_sub))
+                print(f'{"*" * len(del_sub)} successfully deleted')
+            else:
+                print(f'Error: {del_sub} was not found')
+            continue
+        else:
+            try:
+                sub = reddit.subreddit(inp)
+                sub.title
+            except:
+                print(f'Error, subreddit {inp} does not exist')
+                continue
+
+        logging.debug('Subreddit downloaded')
+
+        n = sub.over18
+        name = sub.display_name
+        title = sub.title
+
+        if n:
+            name, title = '*' * len(name), '*' * len(title)
+            make_dir(fn)
+
+
+        print('{:<22}: '.format(name) + title + '\n')
+        make_dir(sub.display_name)
 
         for submission in subreddit_param(sub):
             url = submission.url
@@ -218,13 +289,15 @@ def main():
 
             logging.info('Download URL: ' + url)
             name = slim_title(title) + extension if extension else slim_title(title)
+
+            print(f'Downloading {name if not n else extension}')
+
             status = download_file(name, url, text=text)
             logging.debug(status)
 
+
         while not os.path.basename(os.getcwd()) == data_file_name:
             os.chdir("..")
-        print("Done")
-        sub = get_subreddit()
-
+        print('Done\n')
 if __name__ == '__main__':
     main()
