@@ -14,7 +14,8 @@ msg_exit_format = 'Exiting to main menu: {0}'
 
 def find_extension(url):
     try:
-        return re.search(r'(\.\w{3,5})(\?.{1,2})?$', url).group(1)
+        ext = re.search(r'(\.\w{3,5})(\?.{1,2})?$', url).group(1)
+        return ext
     except:
         return None
 
@@ -46,9 +47,8 @@ def download_video(name, video, audio):
             logging.info(f'Video name: {name}')
             cmd = "ffmpeg -i %s -i %s -c:v copy -c:a aac -strict experimental %s"
             cmd = cmd % ('video.mp4', 'audio.mp3', 'combined.mp4')
-            #with open(os.devnull, 'w') as devnull:
-            #    subprocess.run(cmd, stdout=devnull)
-            subprocess.run(cmd)
+            with open(os.devnull, 'w') as devnull:
+                subprocess.run(cmd, stdout=devnull)
             os.remove('video.mp4')
             os.remove('audio.mp3')
             os.rename('combined.mp4', name)
@@ -64,9 +64,10 @@ def make_dir(dir_name):
     os.chdir(dir_name)
 
 def slim_title(title):
+    name = re.sub(r"[^\s\w',]", '', title).strip()
     char_max = 255 - len(os.path.abspath('.'))
-    title = title[:char_max-1] if len(title) >= char_max else title
-    return title
+    name = name[:char_max-1] if len(name) >= char_max else name
+    return name
 
 def get_size(storage, start_path=os.getcwd()):
     total_size = 0
@@ -216,9 +217,10 @@ def main():
         print('{:<22}: '.format(name) + title + '\n')
         make_dir(sub.display_name)
 
-        for submission in subreddit_param(sub):
+        for submission in subreddit_param(sub, section='top', posts=50):
+
             url = submission.url
-            title = re.sub(r"[^\s\w',]", '', submission.title).strip()
+            title = slim_title(submission.title)
             text = submission.selftext
             extension = find_extension(url)
 
@@ -228,7 +230,24 @@ def main():
             variables = pprint.pformat(vars(submission))
             #logging.debug(variables)
 
-            if bool(re.search(r'gfycat\.com\/\w+', url)):
+            if submission.is_reddit_media_domain and submission.is_video:
+                url = submission.media['reddit_video']['fallback_url']
+                if submission.media['reddit_video']['is_gif']:
+                    extension = '.mp4'
+                else:
+                    url_audio = re.sub(r'\/[^\/]+$',r'/audio', url)
+                    download_video(title, url, url_audio)
+                    continue
+            elif bool(re.search(r'streamable\.com\/\w+', url)):
+                try:
+                    url_id = re.search(r'(\w+)([-\w]+)?$', url).group(1)
+                    req = requests.get('https://api.streamable.com/videos/' + url_id)
+                    url = 'http:' + req.json()['files']['mp4']['url']
+                    extension = 'mp4'
+                except:
+                    logging.debug('streamable page not found')
+                    continue
+            elif bool(re.search(r'gfycat\.com\/\w+', url)):
                 try:
                     url_id = re.search(r'(\w+)([-\w]+)?$', url).group(1)
                     req = requests.get('https://api.gfycat.com/v1/gfycats/' + url_id)
@@ -254,7 +273,10 @@ def main():
                         i = 1
 
                         for item in images:
-                            url = item.link
+                            if item.animated:
+                                url = item.mp4
+                            else:
+                                url = item.link
                             extension = find_extension(url)
 
                             if item.title:
@@ -271,16 +293,15 @@ def main():
                         continue
 
                     else:
-                        url = imgur.get_image(id).link
+                        item = imgur.get_image(id)
+                        if item.animated:
+                            url = item.mp4
+                        else:
+                            url = item.link
                         extension = find_extension(url)
                 except:
                     logging.debug("Error, imgur file is missing, skipping")
                     continue
-            elif bool(submission.is_video):
-                url = submission.media['reddit_video']['fallback_url']
-                url_audio = re.sub(r'\/[^\/]+$',r'/audio', url)
-                download_video(title, url, url_audio)
-                continue
             elif text:
                 extension = '.txt'
             elif not extension:
@@ -288,7 +309,7 @@ def main():
                 extension = '.txt'
 
             logging.info('Download URL: ' + url)
-            name = slim_title(title) + extension if extension else slim_title(title)
+            name = title + extension if extension else title
 
             print(f'Downloading {name if not n else extension}')
 
