@@ -302,9 +302,8 @@ def main():
                 except:
                     logging.debug("Error, imgur file is missing, skipping")
                     continue
-            else:
-                if text:
-                    download_file(title + '.txt', url, text=text)
+            elif text:
+                # WORK HERE REVISE DOWNLOAD FILE TO GET BOTH URL LINK AND TEXT FILE    
                 text = '[InternetShortcut]\nURL=%s' % url
                 extension = '.url'
 
