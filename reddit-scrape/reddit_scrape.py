@@ -9,7 +9,6 @@ from imgurpython import ImgurClient
 logging.basicConfig(level=logging.DEBUG, format='%(message)s')
 logging.disable(logging.ERROR)
 data_file_name = 'Reddit scrape'
-fn = '----'
 msg_exit_format = 'Exiting to main menu: {0}'
 
 def find_extension(url):
@@ -65,7 +64,7 @@ def make_dir(dir_name):
 
 def slim_title(title):
     name = re.sub(r"[^\s\w',]", '', title).strip()
-    char_max = 255 - len(os.path.abspath('.'))
+    char_max = 250 - len(os.path.abspath('.'))
     name = name[:char_max-1] if len(name) >= char_max else name
     return name
 
@@ -110,6 +109,28 @@ def clients():
 
     return reddit, imgur
 
+def settings():
+    choices = ['hot', 'top', 'new']
+    section, posts = 'top', 10
+    msg = f'Enter hot, top, or new: '
+    while True:
+        section = input(msg).lower()
+        if section in choices:
+            break
+        print('Error, try again')
+
+    msg = f'Enter number of posts: '
+    while True:
+        try:
+            posts = int(input(msg))
+            if posts < 1 or posts > 999:
+                raise Exception
+            else:
+                break
+        except:
+            print('Error, try again')
+    return section, posts
+
 def subreddit_param(sub, section='top', posts=10):
     if section == 'top':
         return sub.top(limit=posts)
@@ -145,12 +166,12 @@ def automation(storage):
 
     return num_sub, storage
 
-
 def main():
     prompt = ("Enter name of subreddits, separate with space\n\t"
     + "r for random\n\t"
     + "rr for random automation\n\t"
-    + "d-subreddit to delete subreddit folder\n\t"
+    + "del to delete subreddit folder\n\t"
+    + "s for settings\n\t"
     + "e to exit\n")
 
     reddit, imgur = clients()
@@ -164,37 +185,34 @@ def main():
         if automate:
             if num == -1:
                 num, storage = automation(storage)
-            if get_size(storage) or get_num_sub(num):
+            if get_num_sub(num):
                 automate = False
                 num = -1
                 continue
-            inp = inp[0]
+            inp = 'r'
         else:
             if len(sys.argv) <= 1:
                 sys.argv = sys.argv + input(prompt).split()
             inp = sys.argv.pop(1)
-
-        if inp == 'e':
-            print('Exiting')
-            sys.exit()
-        elif inp == 'r':
+        if inp == 'r':
             sub = reddit.random_subreddit()
-        elif inp == 'n':
-            sub = reddit.random_subreddit(True)
-        elif inp == 'nn' or inp == 'rr':
+        elif inp == 'rr':
             automate = True
             continue
-        elif inp.startswith('d-'):
-            del_sub = inp[2:]
+        elif inp == 'del':
+            del_sub = input('Enter subreddit to be deleted: ')
             if os.path.isdir(del_sub):
                 shutil.rmtree(del_sub)
                 print(f'{del_sub} successfully deleted')
-            elif os.path.isdir(os.path.join(fn, del_sub)):
-                shutil.rmtree(os.path.join(fn, del_sub))
-                print(f'{"*" * len(del_sub)} successfully deleted')
             else:
                 print(f'Error: {del_sub} was not found')
             continue
+        elif inp == 's':
+            settings()
+            continue
+        elif inp == 'e':
+            print('Exiting')
+            break
         else:
             try:
                 sub = reddit.subreddit(inp)
@@ -205,20 +223,18 @@ def main():
 
         logging.debug('Subreddit downloaded')
 
-        n = sub.over18
         name = sub.display_name
         title = sub.title
 
-        if n:
-            name, title = '*' * len(name), '*' * len(title)
-            make_dir(fn)
-
+        if sub.over18:
+            print(f'\n{"*"*20}\nNice try...\n{"*"*20}\n')
+            continue
 
         print('{:<22}: '.format(name) + title + '\n')
         make_dir(sub.display_name)
 
-        for submission in subreddit_param(sub, section='top', posts=50):
 
+        for submission in subreddit_param(sub):
             url = submission.url
             title = slim_title(submission.title)
             text = submission.selftext
@@ -306,7 +322,7 @@ def main():
                 extension = '.txt'
             elif not extension:
                 text = url
-                extension = '.txt'
+                extension = '.URL'
 
             logging.info('Download URL: ' + url)
             name = title + extension if extension else title
@@ -315,6 +331,10 @@ def main():
 
             status = download_file(name, url, text=text)
             logging.debug(status)
+
+            if get_size(storage):
+                automation, num = False, -1
+                print(f'\n{"*"*20}\n{storage} gigabytes exceeded.\n{"*"*20}\n')
 
 
         while not os.path.basename(os.getcwd()) == data_file_name:
