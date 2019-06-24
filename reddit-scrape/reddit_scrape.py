@@ -7,9 +7,11 @@ from imgurpython import ImgurClient
 
 
 logging.basicConfig(level=logging.DEBUG, format='%(message)s')
-logging.disable(logging.ERROR)
+logging.disable(logging.CRITICAL)
 data_file_name = 'Reddit scrape'
 msg_exit_format = 'Exiting to main menu: {0}'
+section, posts, storage = 'top', 10, 1.0
+
 
 def find_extension(url):
     try:
@@ -40,17 +42,24 @@ def download_file(name, url, text=None):
 def download_video(name, video, audio):
     try:
         if not os.path.isfile(name):
-            download_file('video.mp4', video)
-            download_file('audio.mp3', audio)
             name = slim_title(name) + '.mp4'
             logging.info(f'Video name: {name}')
-            cmd = "ffmpeg -i %s -i %s -c:v copy -c:a aac -strict experimental %s"
-            cmd = cmd % ('video.mp4', 'audio.mp3', 'combined.mp4')
-            with open(os.devnull, 'w') as devnull:
-                subprocess.run(cmd, stdout=devnull)
-            os.remove('video.mp4')
-            os.remove('audio.mp3')
-            os.rename('combined.mp4', name)
+            download_file(name, video)
+            try:
+                download_file('audio.mp3', audio)
+            except:
+                logging.info('Video doesn\'t have audio')
+                if os.path.isfile('audio.mp3'):
+                    os.remove('audio.mp3')
+            else:
+                cmd = "ffmpeg -i %s -i %s -c:v copy -c:a aac -strict experimental %s"
+                cmd = cmd % (name, 'audio.mp3', 'combined.mp4')
+                with open(os.devnull, 'w') as devnull:
+                    subprocess.run(cmd, stdout=devnull)
+                os.remove(name)
+                os.remove('audio.mp3')
+                os.rename('combined.mp4', name)
+                logging.info('Video/audio combined')
             logging.info('Downloaded video with audio')
         else:
             return str(f'{name} already exists')
@@ -68,7 +77,7 @@ def slim_title(title):
     name = name[:char_max-1] if len(name) >= char_max else name
     return name
 
-def get_size(storage, start_path=os.getcwd()):
+def get_size(start_path=os.getcwd()):
     total_size = 0
     for dirpath, dirnames, filenames in os.walk(start_path):
         for f in filenames:
@@ -83,17 +92,6 @@ def get_size(storage, start_path=os.getcwd()):
     if exceeded:
         print(msg_exit_format.format(f'Reached {storage} gigabyte(s)'))
     return exceeded
-
-def get_num_sub(num):
-    if num == 'e':
-        print(msg_exit_format.format(''))
-        return True
-    elif type(num) == int:
-        num -= 1
-        if num == 0:
-            print(msg_exit_format.format('Subreddit count reached'))
-            return True
-    return False
 
 def clients():
     reddit = praw.Reddit(
@@ -111,27 +109,37 @@ def clients():
 
 def settings():
     choices = ['hot', 'top', 'new']
-    section, posts = 'top', 10
-    msg = f'Enter hot, top, or new: '
+    global section
+    msg = f'Enter {", ".join(choices[:-1])}, or {choices[-1]} (Curr={section}): '
     while True:
-        section = input(msg).lower()
+        section = input(msg).lower() or section
         if section in choices:
             break
         print('Error, try again')
 
-    msg = f'Enter number of posts: '
+    global posts
+    msg = f'Enter number of posts (Curr={posts}): '
     while True:
         try:
-            posts = int(input(msg))
-            if posts < 1 or posts > 999:
-                raise Exception
-            else:
+            posts = int(input(msg) or posts)
+            if posts >= 1 and posts <= 999:
                 break
         except:
-            print('Error, try again')
-    return section, posts
+            None
+        print('Error, try again')
 
-def subreddit_param(sub, section='top', posts=10):
+    global storage
+    msg = f'Enter maxmimum gigabyte capacity (Curr={storage}): '
+    while True:
+        try:
+            storage = float(input(msg) or storage)
+            if storage > 0:
+                break
+        except:
+            None
+        print('Error, try again')
+
+def subreddit_param(sub):
     if section == 'top':
         return sub.top(limit=posts)
     elif section == 'hot':
@@ -139,34 +147,7 @@ def subreddit_param(sub, section='top', posts=10):
     elif section == 'new':
         return sub.new(limit=posts)
 
-def automation(storage):
-    msg_storage = f'Limit set at {storage} gigabyte(s). Change? (y/n) '
-    usr_storage = None
-    while True:
-        usr_storage = input(msg_storage)
-        if usr_storage == 'y':
-            while True:
-                storage = input('Enter new gigabyte amount: ')
-                try:
-                    storage = float(storage)
-                    break
-                except:
-                    print('Error: not number value')
-            break
-        elif usr_storage == 'n':
-            break
-
-    num_sub = input('Enter number of random subreddits to download, or press '
-                    + f'Enter to fill all {storage} gigabyte(s) (e to exit) ')
-    try:
-        num_sub = float(num_sub)
-    except:
-        if num_sub != 'e':
-            num_sub = None
-
-    return num_sub, storage
-
-def main():
+def get_subreddit(automate):
     prompt = ("Enter name of subreddits, separate with space\n\t"
     + "r for random\n\t"
     + "rr for random automation\n\t"
@@ -174,26 +155,29 @@ def main():
     + "s for settings\n\t"
     + "e to exit\n")
 
-    reddit, imgur = clients()
-    make_dir(data_file_name)
-    automate, num = False, -1
-    inp = None
-    storage = 1
-    logging.debug('Start of while loop')
-
-    while True:
-        if automate:
-            if num == -1:
-                num, storage = automation(storage)
-            if get_num_sub(num):
-                automate = False
-                num = -1
-                continue
-            inp = 'r'
-        else:
+    if not automate:
+        while True:
             if len(sys.argv) <= 1:
                 sys.argv = sys.argv + input(prompt).split()
-            inp = sys.argv.pop(1)
+            try:
+                inp = sys.argv.pop(1)
+                break
+            except:
+                prompt=''
+    else:
+        inp = 'r'
+    return inp
+
+def main():
+    settings()
+
+    reddit, imgur = clients()
+    make_dir(data_file_name)
+    inp = None
+    logging.debug('Start of while loop')
+    automate = False
+    while True:
+        inp = get_subreddit(automate)
         if inp == 'r':
             sub = reddit.random_subreddit()
         elif inp == 'rr':
@@ -318,23 +302,24 @@ def main():
                 except:
                     logging.debug("Error, imgur file is missing, skipping")
                     continue
-            elif text:
-                extension = '.txt'
-            elif not extension:
-                text = url
-                extension = '.URL'
+            else:
+                if text:
+                    download_file(title + '.txt', url, text=text)
+                text = '[InternetShortcut]\nURL=%s' % url
+                extension = '.url'
 
             logging.info('Download URL: ' + url)
-            name = title + extension if extension else title
+            name = title + extension
 
-            print(f'Downloading {name if not n else extension}')
+            print(f'Downloading {name}')
 
             status = download_file(name, url, text=text)
             logging.debug(status)
 
-            if get_size(storage):
-                automation, num = False, -1
-                print(f'\n{"*"*20}\n{storage} gigabytes exceeded.\n{"*"*20}\n')
+            if get_size():
+                automation = False
+                print(f'\n{"*"*20}\n{storage} gigabytes reached.\n{"*"*20}\n')
+                break
 
 
         while not os.path.basename(os.getcwd()) == data_file_name:
